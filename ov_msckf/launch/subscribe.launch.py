@@ -3,6 +3,7 @@ from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, TextSubstitution
 from launch_ros.actions import Node
+from launch.actions import ExecuteProcess
 from ament_index_python.packages import get_package_share_directory, get_package_prefix
 import os
 import sys
@@ -13,8 +14,12 @@ launch_args = [
         name="ov_enable", default_value="true", description="enable OpenVINS node"
     ),
     DeclareLaunchArgument(
-        name="rviz_enable", default_value="false", description="enable rviz node"
+        name="rviz_enable", default_value="true", description="enable rviz node"
     ),
+    DeclareLaunchArgument(name="dataset", default_value="/tmp/V1_01_easy"),
+    DeclareLaunchArgument(name="out_est", default_value="out_est.csv"),
+    DeclareLaunchArgument(name="out_std", default_value="out_std.csv"),
+    DeclareLaunchArgument(name="out_gt", default_value="out_gt.csv"),
     DeclareLaunchArgument(
         name="config",
         default_value="euroc_mav",
@@ -27,7 +32,7 @@ launch_args = [
     ),
     DeclareLaunchArgument(
         name="verbosity",
-        default_value="INFO",
+        default_value="WARNING",
         description="ALL, DEBUG, INFO, WARNING, ERROR, SILENT",
     ),
     DeclareLaunchArgument(
@@ -85,6 +90,9 @@ def launch_setup(context):
             {"use_stereo": LaunchConfiguration("use_stereo")},
             {"max_cameras": LaunchConfiguration("max_cameras")},
             {"save_total_state": LaunchConfiguration("save_total_state")},
+            {"filepath_est": LaunchConfiguration("out_est")},
+            {"filepath_std": LaunchConfiguration("out_std")},
+            {"filepath_gt": LaunchConfiguration("out_gt")},
             {"config_path": config_path},
         ],
     )
@@ -104,7 +112,10 @@ def launch_setup(context):
             ],
     )
 
-    return [node1, node2]
+    # "/storage/local/ssd/mayom/Documents/apps/datasets/euroc/bags/ros2/V1_01_easy"
+    node3 = ExecuteProcess(cmd=["ros2", "bag", "play", "--loop", LaunchConfiguration("dataset")], output="screen")
+
+    return [node1, node2, node3]
 
 
 def generate_launch_description():
