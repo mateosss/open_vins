@@ -1,0 +1,6 @@
+VIT_3.0.0{
+	global:
+		vit_*;
+	local:
+		*;
+};

@@ -49,5 +49,46 @@ else ()
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ROS1.cmake)
 endif ()
 
+# VIT related build
+list(APPEND LIBRARY_SOURCES
+        src/dummy.cpp
+        src/sim/Simulator.cpp
+        src/state/State.cpp
+        src/state/StateHelper.cpp
+        src/state/Propagator.cpp
+        src/core/VioManager.cpp
+        src/core/VioManagerHelper.cpp
+        src/update/UpdaterHelper.cpp
+        src/update/UpdaterMSCKF.cpp
+        src/update/UpdaterSLAM.cpp
+        src/update/UpdaterZeroVelocity.cpp
+)
+file(GLOB_RECURSE LIBRARY_HEADERS "src/*.h")
+list(APPEND thirdparty_libraries
+        ${Boost_LIBRARIES}
+        ${OpenCV_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${catkin_LIBRARIES}
+)
 
-
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+add_library(openvins SHARED)
+target_sources(openvins
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/src/vit/vit_interface.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/vit/vit_tracker.hpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/vit/vit_tracker.cpp
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/vit/vit_implementation_helper.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/vit/vit_implementation_helper.hpp
+            ${LIBRARY_SOURCES} ${LIBRARY_HEADERS})
+target_compile_definitions(openvins PRIVATE VIT_INTERFACE_IMPLEMENTATION)
+target_include_directories(openvins PRIVATE src/)
+target_include_directories(ov_msckf_lib PRIVATE src/vit)
+target_link_libraries(openvins PRIVATE ${thirdparty_libraries})
+set_target_properties(openvins PROPERTIES
+  LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cmake/vit.map
+  LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/vit.map"
+  VERSION "3.0.0"
+  SOVERSION 3
+)
