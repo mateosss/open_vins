@@ -207,21 +207,31 @@ struct OVTracker::Implementation {
 
 		while (running) {
 			CameraData frameset{};
-			frameset.images.resize(cam_count);
-			frameset.sensor_ids.resize(cam_count);
-			frameset.masks.resize(cam_count);
+			frameset.images.reserve(cam_count);
+			frameset.sensor_ids.reserve(cam_count);
+			frameset.masks.reserve(cam_count);
 			for (int i = 0; i < int(cam_count); i++) {
 				StampedFrame ts_img{};
 				bool dequeued = unsent_frames.at(i).wait_dequeue_timed(ts_img, timeout);
-				ASSERT(dequeued, "Failed to dequeue cam%d frame", i);
+				if (!dequeued) {
+					if (i == 0) break;
+					else ASSERT(i == 0, "Failed to dequeue cam%d frame", i);
+				}
 
 				auto [ts, img] = ts_img;
-				frameset.images.at(i) = img;
-				frameset.sensor_ids.at(i) = i;
-				frameset.timestamp = ts;
+				if (i == 0) frameset.timestamp = ts;
+				else ASSERT(ts == frameset.timestamp, "Different timestamps %lf != %lf", ts, frameset.timestamp);
+				frameset.images.push_back(img);
+				frameset.sensor_ids.push_back(i);
 
 				// TODO@mateosss: I am creating a new empty mask for each frame
-				frameset.masks.at(i) = cv::Mat::zeros(cv::Size(img.cols, img.rows), CV_8UC1);
+				frameset.masks.push_back(cv::Mat::zeros(cv::Size(img.cols, img.rows), CV_8UC1));
+			}
+
+			if (frameset.images.size() != cam_count) {
+				if (!frameset.images.empty())
+					printf("Skipping %lu frames in %lf\n", frameset.images.size(), frameset.timestamp);
+				continue;
 			}
 
 			auto imus = get_unsent_imus_upto(frameset.timestamp);
@@ -279,18 +289,18 @@ struct OVTracker::Implementation {
 		return VIT_SUCCESS;
 	}
 
-	Result pop_pose(Pose **pose) {
+	Result pop_pose(Pose **out_pose) {
 		shared_ptr<State> state{};
 
 		bool popped = estimates.try_dequeue(state);
 
 		if (popped) {
-			if (pose == nullptr) return VIT_SUCCESS; // Discard if caller sent null ptr
+			if (out_pose == nullptr) return VIT_SUCCESS;
 			OVPose *p = new OVPose();
 			p->impl_ = make_unique<OVPose::Implementation>(state);
-			*pose = static_cast<vit_pose_t *>(p);
+			*out_pose = static_cast<vit_pose_t *>(p);
 		} else {
-			*pose = nullptr;
+			*out_pose = nullptr;
 		}
 
 		return vit::Result::VIT_SUCCESS;
