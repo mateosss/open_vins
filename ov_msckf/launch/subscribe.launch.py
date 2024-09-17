@@ -16,10 +16,10 @@ launch_args = [
     DeclareLaunchArgument(
         name="rviz_enable", default_value="true", description="enable rviz node"
     ),
-    DeclareLaunchArgument(name="dataset", default_value="/tmp/V1_01_easy"),
-    DeclareLaunchArgument(name="out_est", default_value="out_est.csv"),
-    DeclareLaunchArgument(name="out_std", default_value="out_std.csv"),
-    DeclareLaunchArgument(name="out_gt", default_value="out_gt.csv"),
+    DeclareLaunchArgument(name="dataset", default_value="/storage/local/ssd/mayom/Documents/apps/datasets/euroc/bags/ros2/MH_04_difficult"),
+    DeclareLaunchArgument(name="out_est", default_value="/tmp/out_est.csv"),
+    DeclareLaunchArgument(name="out_std", default_value="/tmp/out_std.csv"),
+    DeclareLaunchArgument(name="out_gt", default_value="/tmp/out_gt.csv"),
     DeclareLaunchArgument(
         name="config",
         default_value="euroc_mav",
@@ -47,7 +47,7 @@ launch_args = [
     ),
     DeclareLaunchArgument(
         name="save_total_state",
-        default_value="false",
+        default_value="true",
         description="record the total state with calibration and features to a txt file",
     )
 ]
