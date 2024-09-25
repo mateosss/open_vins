@@ -55,33 +55,33 @@ constexpr double S_AS_NS = 1e-9;
 #define ASSERT_(cond) ASSERT(cond, "%s", #cond);
 
 struct OVPose::Implementation {
-	shared_ptr<State> state;
-
-	Implementation(const shared_ptr<State> &state) : state(state) {}
+	PoseData data{};
+	Implementation(const State &state) {
+		auto pos = state._imu->pos();
+		auto quat = state._imu->quat();
+		auto vel = state._imu->vel();
+		data.timestamp = int64_t(state._timestamp / S_AS_NS);
+		data.px = float(pos.x());
+		data.py = float(pos.y());
+		data.pz = float(pos.z());
+		data.ox = float(quat.x());
+		data.oy = float(quat.y());
+		data.oz = float(quat.z());
+		data.ow = float(quat.w());
+		data.vx = float(vel.x());
+		data.vy = float(vel.y());
+		data.vz = float(vel.z());
+	}
 	~Implementation() = default;
 
-	void get_data(PoseData *data) const {
-		auto pos = state->_imu->pos();
-		auto quat = state->_imu->quat();
-		auto vel = state->_imu->vel();
-		data->timestamp = int64_t(state->_timestamp / S_AS_NS);
-		data->px = float(pos.x());
-		data->py = float(pos.y());
-		data->pz = float(pos.z());
-		data->ox = float(quat.x());
-		data->oy = float(quat.y());
-		data->oz = float(quat.z());
-		data->ow = float(quat.w());
-		data->vx = float(vel.x());
-		data->vy = float(vel.y());
-		data->vz = float(vel.z());
+	Result get_data(PoseData *out_data) const {
+		*out_data = data;
+		return VIT_SUCCESS;
 	}
 
 	Result get_timing(PoseTiming * /* out_timing */) const { return VIT_ERROR_NOT_SUPPORTED; }
 
-	Result get_features(uint32_t /* camera_index */, PoseFeatures * /* out_features */) const {
-		return VIT_ERROR_NOT_SUPPORTED;
-	}
+	Result get_features(uint32_t /* cam_id */, PoseFeatures * /* out_feat */) const { return VIT_ERROR_NOT_SUPPORTED; }
 };
 
 Result OVPose::get_data(PoseData *data) const {
@@ -137,20 +137,18 @@ struct OVTracker::Implementation {
 	}
 
 	Result enable_extension(TrackerExtension ext, bool enable) {
-		int64_t ext_index = (int64_t)ext;
-		if (ext_index >= VIT_TRACKER_EXTENSION_COUNT) {
+		if (ext >= VIT_TRACKER_EXTENSION_COUNT) {
 			PRINT_ERROR("Invalid extension: %d", ext);
 			return VIT_ERROR_INVALID_VALUE;
 		}
 
-		bool supported = ((bool *)&exts)[ext_index];
+		bool supported = exts.has[ext];
 		if (!supported) {
 			PRINT_ERROR("Unsupported extension: %d", ext);
 			return VIT_ERROR_NOT_SUPPORTED;
 		}
 
-		bool *enabled = &((bool *)&enabled_exts)[ext_index];
-		*enabled = enable;
+		enabled_exts.has[ext] = enable;
 
 		return VIT_SUCCESS;
 	}
@@ -220,7 +218,8 @@ struct OVTracker::Implementation {
 
 				auto [ts, img] = ts_img;
 				if (i == 0) frameset.timestamp = ts;
-				else ASSERT(ts == frameset.timestamp, "Different timestamps %lf != %lf", ts, frameset.timestamp);
+				else if (ts != frameset.timestamp) break; // Ignore incomplete frameset
+
 				frameset.images.push_back(img);
 				frameset.sensor_ids.push_back(i);
 
@@ -251,7 +250,9 @@ struct OVTracker::Implementation {
 			if (!sys->initialized()) continue;
 
 			shared_ptr<State> state_ov = sys->get_state();
-			estimates.enqueue(state_ov);
+			OVPose *p = new OVPose();
+			p->impl_ = make_unique<OVPose::Implementation>(*state_ov);
+			estimates.enqueue(p);
 		}
 	}
 
@@ -290,15 +291,13 @@ struct OVTracker::Implementation {
 	}
 
 	Result pop_pose(Pose **out_pose) {
-		shared_ptr<State> state{};
+		OVPose *state{};
 
 		bool popped = estimates.try_dequeue(state);
 
 		if (popped) {
 			if (out_pose == nullptr) return VIT_SUCCESS;
-			OVPose *p = new OVPose();
-			p->impl_ = make_unique<OVPose::Implementation>(state);
-			*out_pose = static_cast<vit_pose_t *>(p);
+			*out_pose = state;
 		} else {
 			*out_pose = nullptr;
 		}
@@ -322,7 +321,7 @@ struct OVTracker::Implementation {
 	atomic<bool> running = false;
 	std::vector<BlockingConcurrentQueue<StampedFrame>> unsent_frames{FRAME_QUEUE_INITIAL_SIZE};
 	ConcurrentQueue<ImuSample> unsent_imus{IMU_QUEUE_INITIAL_SIZE};
-	ReaderWriterQueue<shared_ptr<State>> estimates{POSE_QUEUE_INITIAL_SIZE};
+	ReaderWriterQueue<OVPose *> estimates{POSE_QUEUE_INITIAL_SIZE};
 	vector<ImuData> imus_ov;
 	thread frame_consumer_thread{};
 };
